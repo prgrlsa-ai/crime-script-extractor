@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>범죄 스크립트 자동 추출기</title>
+  <style>
+    :root { --ink:#16211f; --field:#f6f7f2; --line:#d7ded3; --moss:#52796f; --clay:#b35f43; --gold:#d99f35; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; background:#f7f8f3; color:var(--ink); }
+    main { max-width: 1500px; margin:0 auto; padding:24px; display:grid; gap:20px; grid-template-columns:minmax(320px,480px) 1fr; }
+    section { border:1px solid var(--line); background:white; border-radius:8px; padding:18px; box-shadow:0 8px 24px rgba(22,33,31,.06); }
+    h1,h2 { margin:0 0 10px; letter-spacing:0; }
+    h1 { font-size:24px; } h2 { font-size:18px; }
+    p { color:rgba(22,33,31,.66); line-height:1.6; }
+    label { display:block; font-size:12px; font-weight:700; color:rgba(22,33,31,.7); margin:14px 0 6px; }
+    input, textarea, select { width:100%; border:1px solid var(--line); border-radius:6px; padding:10px 12px; font:inherit; outline:none; background:white; }
+    textarea { min-height:360px; resize:vertical; line-height:1.55; }
+    button { border:0; border-radius:6px; background:var(--moss); color:white; font-weight:700; padding:10px 14px; cursor:pointer; }
+    button.secondary { background:white; color:var(--ink); border:1px solid var(--line); }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .grid { display:grid; gap:14px; grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .metric { background:var(--field); border:1px solid var(--line); border-radius:6px; padding:12px; }
+    .metric span { display:block; font-size:12px; color:rgba(22,33,31,.58); font-weight:700; }
+    .metric strong { display:block; margin-top:4px; font-size:24px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0; }
+    table { width:100%; border-collapse:collapse; font-size:13px; min-width:1200px; }
+    th,td { border-bottom:1px solid var(--line); padding:9px; text-align:left; vertical-align:top; }
+    th { background:var(--field); color:rgba(22,33,31,.65); font-size:12px; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; }
+    .stage-before { color:#477c3f; font-weight:700; } .stage-during { color:#b35f43; font-weight:700; } .stage-after { color:#4d7fa8; font-weight:700; }
+    .graph { min-height:360px; border:1px solid var(--line); border-radius:8px; background:var(--field); overflow:hidden; }
+    .notice { background:#fff8e8; border:1px solid #efd19a; color:#7a5514; border-radius:6px; padding:10px 12px; font-size:13px; }
+    @media (max-width: 980px) { main { grid-template-columns:1fr; padding:14px; } .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>범죄 스크립트 자동 추출</h1>
+    <p>공개 웹 버전입니다. API 키 없이 브라우저 안에서 규칙 기반 추출만 실행합니다.</p>
+    <label>사건 ID</label>
+    <input id="caseId" placeholder="예: 2024고단1234" />
+    <label>판결문 원문 또는 범죄사실 텍스트</label>
+    <textarea id="rawText" placeholder="범죄사실 또는 판결문 원문을 붙여넣으세요."></textarea>
+    <div class="toolbar">
+      <button id="extractBtn">규칙 + AI 추출</button>
+      <button class="secondary" id="resetBtn">초기화</button>
+    </div>
+    <div class="notice">AI API 키 없이 실행 중입니다. 현재 공개 버전은 규칙 기반 결과만 사용합니다.</div>
+  </section>
+  <div style="display:grid; gap:20px;">
+    <section>
+      <h2>추출 요약</h2>
+      <div class="grid" id="summary"></div>
+    </section>
+    <section>
+      <h2>검수 가능한 추출 결과</h2>
+      <div class="toolbar">
+        <button class="secondary" id="confirmAllBtn">전체 확정</button>
+        <button class="secondary" id="downloadJsonBtn">confirmed-steps.json</button>
+        <button class="secondary" id="downloadCsvBtn">confirmed-steps.csv</button>
+        <button class="secondary" id="downloadJsonlBtn">ai-training.jsonl</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>확정</th><th>단계</th><th>순서</th><th>누가</th><th>언제</th><th>어디서</th><th>무엇으로</th><th>어떻게</th><th>누구를</th><th>왜</th><th>근거 문장</th><th>신뢰도</th><th>삭제</th></tr></thead><tbody id="rows"></tbody></table></div>
+    </section>
+    <section>
+      <h2>행동 네트워크</h2>
+      <div class="graph"><svg id="graph" width="100%" height="360" role="img"></svg></div>
+    </section>
+  </div>
+</main>
+<script>
+const tools = ["칼","흉기","망치","과도","목도리","휴대전화","차량","주먹","발","손","라이터","방망이","총기","병","끈"];
+const actions = ["접근","만났다","만나","시비","폭행","때렸","찌르","베","목을 조르","질식","가격","협박","감금","상해","살해","절취","방화","도주","은닉","유기","증거","신고","자수","침입","추행","강간","갈취","준비","계획"];
+const motives = ["채무","금전","이별","분노","보복","원한","질투","보험금","생활비","술에 취해","정신질환","계획","우발"];
+const before = ["접근","만나","방문","유인","대기","준비","흉기","계획","시비","감정"];
+const during = ["폭행","때렸","찌르","베","목을 조르","협박","감금","상해","살해","방화","공격","추행","강간","갈취"];
+const after = ["도주","은닉","유기","증거","신고","자수","이탈","버렸","숨겼"];
+let steps = [];
+function clean(v){ return (v||"").replace(/\s+/g," ").replace(/[,.。]+$/g,"").trim(); }
+function hasAny(s, arr){ return arr.some(w => s.includes(w)); }
+function findWord(s, arr){ return arr.find(w => s.includes(w)) || ""; }
+function match(s, patterns){ for (const p of patterns){ const m=s.match(p); if(m) return clean(m[1]||m[0]); } return ""; }
+function section(text){ const starts=["범죄사실","범 죄 사 실","공소사실","범행"]; const ends=["증거의 요지","법령의 적용","양형의 이유","판단","이유"]; const start = starts.map(k=>text.indexOf(k)).filter(i=>i>=0).sort((a,b)=>a-b)[0]; if(start===undefined) return text; const rest=text.slice(start); const end=ends.map(k=>rest.indexOf(k)).filter(i=>i>0).sort((a,b)=>a-b)[0]; return rest.slice(0,end||rest.length); }
+function sentences(text){ return section(text).replace(/\r\n/g,"\n").replace(/([.。]|다\.|함\.|음\.|였다\.|하였다\.|했다\.|한다\.)\s*/g,"$1\n").replace(/\n\s*(\d+\.|[가-하]\.|[①-⑳]|[㉠-㉭])\s*/g,"\n").split(/\n+/).map(clean).filter(s=>s.length>2); }
+function classify(s,a,seen){ const basis=s+" "+a; if(hasAny(basis,after)) return "after"; if(hasAny(basis,during)) return "during"; if(hasAny(basis,before)) return "before"; return seen ? "after" : "before"; }
+function extract(){ const raw=document.getElementById('rawText').value; const id=document.getElementById('caseId').value.trim() || `case-${Date.now()}`; if(!raw.trim()) return; let seen=false; steps=sentences(raw).map((s,i)=>{ const action=match(s,[new RegExp(`([가-힣\\s]{0,12}${findWord(s,actions)}[가-힣\\s]{0,18}(?:하였다|했다|하고|하여|함|하였고|한)?)`)] ) || findWord(s,actions); const signal=action||hasAny(s,tools)||hasAny(s,motives)||s.includes('피해자')||s.includes('피고인'); if(!signal) return null; const stage=classify(s,action,seen); if(stage==='during') seen=true; const tool=findWord(s,tools); const motive=findWord(s,motives); const step={id:`${id}-${i+1}`,case_id:id,stage,sequence_order:0,actor:match(s,[/(피고인\s*[A-Z가-힣]?)/,/(공범\s*[A-Z가-힣]?)/,/(성명불상자)/]),time:match(s,[/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.\s*\d{1,2}:\d{2}\s*경?/,/\d{4}년\s*\d{1,2}월\s*\d{1,2}일\s*\d{1,2}시\s*\d{1,2}분\s*경?/,/\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\.?\s*경?/,/(같은 날|그 무렵|이후|그 후|당시|전날|다음 날)/]),place:match(s,[/([가-힣A-Za-z0-9\s"'()-]{2,40}(?:주거지|모텔|아파트|차량 안|차량|도로|식당|술집|방|현장|집|사무실|편의점|주점|노래방))(?:에서|에|으로|로)?/]),tool,action,accomplice:match(s,[/(공범\s*[A-Z가-힣]?)/,/(공동하여|공모하여|합동하여)/]),victim:match(s,[/(피해자\s*[A-Z가-힣]?)/,/(망인\s*[A-Z가-힣]?)/]),motive,object_element:[match(s,[/(피해자\s*[A-Z가-힣]?)/]),tool].filter(Boolean).join(' / '),action_element:action,environment_element:[],previous_action:'',next_action:'',evidence_sentence:s,confidence:0,source:'rule',conflict:false,is_confirmed:false}; step.environment_element=[step.time,step.place,step.motive,step.accomplice].filter(Boolean).join(' / '); step.confidence=(action?0.3:0)+(step.time?0.1:0)+(step.place?0.1:0)+(step.victim?0.1:0)+(tool?0.1:0)+(motive?0.1:0)+0.2; return step; }).filter(Boolean).map((s,i,a)=>({...s,sequence_order:i+1,previous_action:a[i-1]?.action||'',next_action:a[i+1]?.action||''})); render(); }
+function render(){ const counts={before:0,during:0,after:0}; steps.forEach(s=>counts[s.stage]++); const confirmed=steps.filter(s=>s.is_confirmed).length; const avg=steps.length?Math.round(steps.reduce((a,s)=>a+s.confidence,0)/steps.length*100):0; document.getElementById('summary').innerHTML=[['전체 행동',steps.length],['확정',confirmed],['이전',counts.before],['범행 중',counts.during],['이후',counts.after],['평균 신뢰도',avg+'%'],['규칙 결과',steps.length],['AI 결과',0]].map(([k,v])=>`<div class="metric"><span>${k}</span><strong>${v}</strong></div>`).join(''); document.getElementById('rows').innerHTML=steps.map((s,i)=>`<tr><td><input type="checkbox" ${s.is_confirmed?'checked':''} onchange="steps[${i}].is_confirmed=this.checked;render()"></td><td class="stage-${s.stage}">${s.stage}</td><td>${s.sequence_order}</td><td>${s.actor}</td><td>${s.time}</td><td>${s.place}</td><td>${s.tool}</td><td><input value="${s.action}" onchange="steps[${i}].action=this.value;render()"></td><td>${s.victim}</td><td>${s.motive}</td><td>${s.evidence_sentence}</td><td>${s.confidence.toFixed(1)}</td><td><button class="secondary" onclick="steps.splice(${i},1);render()">삭제</button></td></tr>`).join('') || '<tr><td colspan="13">아직 추출 결과가 없습니다.</td></tr>'; drawGraph(); }
+function drawGraph(){ const svg=document.getElementById('graph'); const w=svg.clientWidth||800,h=360; const confirmed=steps.filter(s=>s.is_confirmed&&s.action); const map=new Map(); confirmed.forEach(s=>map.set(s.action,(map.get(s.action)||0)+1)); const nodes=[...map.entries()].map(([id,count],i)=>({id,count,x:80+(i%6)*120,y:80+Math.floor(i/6)*90})); svg.setAttribute('viewBox',`0 0 ${w} ${h}`); svg.innerHTML=nodes.map(n=>`<circle cx="${n.x}" cy="${n.y}" r="${6+Math.min(n.count,100)/100*94}" fill="#52796f" opacity=".85"></circle><text x="${n.x}" y="${n.y+24}" text-anchor="middle" font-size="12">${n.id}</text>`).join(''); }
+function download(name, text, type='application/json'){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+document.getElementById('extractBtn').onclick=extract; document.getElementById('resetBtn').onclick=()=>{steps=[];document.getElementById('rawText').value='';render();}; document.getElementById('confirmAllBtn').onclick=()=>{steps=steps.map(s=>({...s,is_confirmed:true}));render();}; document.getElementById('downloadJsonBtn').onclick=()=>download('confirmed-steps.json',JSON.stringify(steps.filter(s=>s.is_confirmed),null,2)); document.getElementById('downloadCsvBtn').onclick=()=>download('confirmed-steps.csv',['case_id,stage,sequence_order,actor,time,place,tool,action,victim,motive,evidence_sentence,confidence',...steps.filter(s=>s.is_confirmed).map(s=>[s.case_id,s.stage,s.sequence_order,s.actor,s.time,s.place,s.tool,s.action,s.victim,s.motive,s.evidence_sentence,s.confidence].map(v=>'"'+String(v||'').replaceAll('"','""')+'"').join(','))].join('\n'),'text/csv'); document.getElementById('downloadJsonlBtn').onclick=()=>download('ai-training.jsonl',steps.filter(s=>s.is_confirmed).map(s=>JSON.stringify({input:s.evidence_sentence,output:{stage:s.stage,actor:s.actor,action:s.action,tool:s.tool,victim:s.victim,motive:s.motive}})).join('\n'),'application/x-ndjson'); render();
+</script>
+</body>
+</html>
